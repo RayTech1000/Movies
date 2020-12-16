@@ -1,0 +1,5 @@
+Box-Office Budget Prediction, Oscars Classification with Machine Learning
+
+This project aims to predict the box-office performance of the mainstream movies from large production studios. This project uses several regression models and calculates the error of each one. 
+
+This project will demonstrate the connection between numerical and categorical variables with the box-office ticket sales. Also, a second data set was used to predict Oscar nominated films. Classification models with accuracy results were used in order to demonstrate this.
