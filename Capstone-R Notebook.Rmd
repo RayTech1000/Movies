@@ -1,0 +1,804 @@
+---
+title: "Capstone Project"
+author: "Ray"
+date: "Fall 2020"
+output:
+word_document: default
+html_document: default
+pdf_document: default
+---
+Capstone
+
+```{r}
+#Importing Data
+setwd("D:/02Grad School/R-Dir/Capstone/data")
+oscars = read.csv("the_oscar_award.csv",stringsAsFactors=TRUE)
+movies = read.csv("IMDb movies.csv",stringsAsFactors=TRUE)
+studios = read.csv("D:/02Grad School/R-Dir/Capstone/data/studios.csv",stringsAsFactors=TRUE)
+```
+```{r}
+#Reading in a list of studios to join with the IMDB data set
+library(dplyr)
+large_studios = movies %>%
+inner_join(studios, by = "production_company")
+large_studios %>%
+count(production_company)
+```
+Section 1: Predicting Box Office Performance
+```{r}
+#Exploratory data
+library(psych)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+str(movies)
+summary(movies)
+summary(movies$worlwide_gross_income)
+movies$budget = as.numeric(gsub("\\$", "", movies$budget))
+movies$box_office = as.numeric(gsub("\\$", "", movies$worlwide_gross_income))
+movies$budget = as.numeric(gsub("\\$", "", movies$budget))
+movies$box_office = as.numeric(gsub("\\$", "", movies$worlwide_gross_income))
+movies$usa_box_office = as.numeric(gsub("\\$", "", movies$usa_gross_income))
+movies$year <-substr(as.character(movies$date_published), 1, 4)
+movies = movies %>%
+arrange(box_office)%>%filter(year >= 1980)%>%
+filter(!is.na(box_office))%>%
+filter(!is.na(budget))%>%
+mutate(ratio = box_office/budget)
+```
+```{r}
+#Studying the summary of data, checking for null values
+summary(movies)
+summary(movies$ratio)
+summary(movies$box_office)
+count(movies)
+null = is.na(movies)
+summary(null)
+box_office = movies$box_office
+budget = movies$budget
+summary(box_office)
+quantile(box_office)
+summary(movies$budget)
+quantile(movies$budget)
+num1<-dplyr::select_if(movies, is.numeric)
+num1
+pairs.panels(num1)
+#Observing correlated numerical variables
+corr1<-cor(box_office, num1)
+corr1
+correlated1= which(corr1>=.49)
+correlated1
+```
+```{r}
+#Histogram
+histogram = ggplot(movies, aes(x=box_office)) + geom_histogram()
+histogram
+```
+```{r}
+large_studios = movies %>%
+inner_join(studios, by = "production_company")
+```
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+#Selecting categorical variables
+categ= large_studios %>% select_if(negate(is.numeric))
+str(categ)
+#Bar plots of Categorical data
+ggplot(movies, aes(x=title,y=box_office)) + geom_bar(stat="identity") + theme(axis.text.x =
+element_text(angle = 90, hjust = 1))
+ggplot(movies, aes(x=genre,y=box_office)) + geom_bar(stat="identity") + theme(axis.text.x =element_text(angle = 90, hjust = 1))
+ggplot(movies, aes(x=country,y=box_office)) + geom_bar(stat="identity") + theme(axis.text.x =
+element_text(angle = 90, hjust = 1))
+ggplot(movies, aes(x=production_company,y=box_office)) + geom_bar(stat="identity") +
+theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+```{r}
+#Splitting up the directions, counting the ones that have 10 films or more
+large_studios %>%
+count(director) %>%
+arrange(-n)
+directorsa = large_studios %>%
+count(director) %>%
+arrange(-n)
+summary(directorsa)
+studios_temp=
+large_studios %>%
+add_count(director, name="directorcount") %>%
+mutate(director = forcats::fct_expand(director, "otherdirectors")) %>%
+mutate(directorsa=case_when(directorcount >= 10~director,
+TRUE ~factor("otherdirectors") ))
+directors_temp= studios_temp %>%
+mutate(value=1L) %>%
+select(imdb_title_id, directorsa, value) %>%
+pivot_wider(names_from = "directorsa", values_from = "value") %>%
+mutate(across(where(is.integer),~ifelse(is.na(.x), 0, .x)))
+```
+```{r}
+#Splitting up two more categorical columns for Genre and Writers
+library(data.table)
+library(mltools)
+cat = categ[c("genre", "writer")]
+summary(categ$genre)
+cat<-as.data.frame(cat)
+```
+```{r}
+genre1=categ %>%
+mutate(genre=as.character(genre)) %>%
+select(genre) %>%
+tidyr::separate_rows(genre, sep=",") %>%
+count(genre) %>%
+filter(n >=30) %>%
+pull(genre)
+```
+```{r}
+writer1=categ %>%
+mutate(writer=as.character(writer)) %>%
+select(writer, imdb_title_id) %>%
+tidyr::separate_rows(writer, sep=",") %>%
+count(writer) %>%
+filter(n > 9) %>%
+pull(writer)
+```
+```{r}
+library(tidyr)
+library(dplyr)
+cat = categ[c("genre")]
+str(cat)
+gen=categ %>%
+mutate(genre=as.character(genre)) %>%
+tidyr::separate_rows(genre, sep=",") %>%
+mutate(value =1) %>%
+pivot_wider(names_from = "genre", values_from= value) %>%
+select(imdb_title_id, all_of(genre1)) %>%
+mutate(across(all_of(genre1), ~ifelse(is.na(.x), 0, .x)))
+summary(gen)
+```
+```{r}
+cat = categ[c("writer")]
+str(cat)
+writ=categ %>%
+select(imdb_title_id, writer) %>%
+mutate(writer=as.character(writer)) %>%
+tidyr::separate_rows(writer, sep=",") %>%
+mutate(value =1) %>%
+pivot_wider(names_from = "writer", values_from= value) %>%
+select(imdb_title_id, all_of(writer1)) %>%
+mutate(across(all_of(writer1), ~ifelse(is.na(.x), 0, .x)))
+summary(writer1)
+```
+```{r}
+#Isolating the Numeric columns only
+num<-dplyr::select_if(large_studios, is.numeric)
+num
+pairs.panels(num)
+#Scaling, Taking out Categorical variables, Year, and the dependent variables
+movie_temp1<- as.data.frame(scale(num[, -c(9)]))
+box_office = log(large_studios$box_office)#Checking for missing cases
+missing<-sum(!complete.cases(movie_temp1))
+missing
+```
+```{r}
+library(tidyverse)
+movie_temp2= gen %>% inner_join(writ) %>% distinct() %>% inner_join(directors_temp,
+by="imdb_title_id")
+#Binding the variables together
+movie_temp = cbind(movie_temp1, movie_temp2)
+movie_temp= select(movie_temp,-c(imdb_title_id))
+```
+```{r}
+library(rsample)
+library(caret)
+#Splitting Data for Training, Testing
+data_split = initial_split(movie_temp, prop = .8)
+movie_train_data = training(data_split)
+movie_test_data = testing(data_split)
+indexTrainValidation <- createDataPartition(y = movie_train_data$box_office, p = 0.8,list = FALSE)
+movie_val_data <- movie_train_data[-indexTrainValidation,]
+```
+```{r}
+#Imputing the values that are missing with tidymodels
+library(tidymodels)
+impute_rec_train = recipe(box_office~., data=movie_train_data) %>%
+step_knnimpute(metascore)%>%
+step_knnimpute(reviews_from_users)%>%
+step_knnimpute(reviews_from_critics)
+impute_rec_test = recipe(box_office~., data=movie_test_data) %>%
+step_knnimpute(metascore)%>%
+step_knnimpute(reviews_from_users)%>%
+step_knnimpute(reviews_from_critics)
+```
+```{r}
+#Prepping the train and test sets
+library(tidymodels)
+prep_train=prep(impute_rec_train)
+prep_test = prep(impute_rec_test)
+```
+```{r}
+#Juicing them will replace any missing values
+library(tidymodels)
+movies_train= juice(prep_train)
+movies_test=juice(prep_test)
+#Checking for missing cases
+missing_train<-sum(!complete.cases(movies_train))
+missing_train
+#Checking for missing cases
+missing_test<-sum(!complete.cases(movies_test))
+missing_test
+```
+```{r}
+#Linear Regression
+set.seed(1)
+library(caret)
+library(dplyr)
+train.control = trainControl(method = "cv", number = 10)
+linearRegression <- train(box_office ~., data = movies_train, method = "lm", trControl = train.control)
+print(linearRegression)
+summary(linearRegression)
+#Checking the RMSE of the box_office
+predictionsLR= predict(linearRegression, movies_test)
+RMSE(predictionsLR, movies_test$box_office)
+R2(predictionsLR, movies_test$box_office)
+#Comparing to the Standard Deviation of the box_office Column
+sd(movies_train$box_office)
+sd(movies_test$box_office)
+sd(box_office)
+```
+```{r}
+#Lasso
+library(glmnet)
+set.seed(1)
+lasso <- train(
+box_office ~. , data = movies_train, method = "glmnet",
+trControl = trainControl("cv", number = 10),
+tuneGrid = expand.grid(alpha = 1, lambda = 10^seq(-3, 1, length =100)))
+lasso
+coef(lasso$finalModel, lasso$bestTune$lambda)
+predictionsL <- predict(lasso, movies_test)
+RMSE(predictionsL, movies_test$box_office)
+R2(predictionsL, movies_test$box_office)
+```
+```{r}
+#Ridge
+set.seed(1)
+ridge <- train(
+box_office ~., data = movies_train, method = "glmnet",
+trControl = trainControl("cv", number = 10),
+tuneGrid = expand.grid(alpha = 0, lambda = 10^seq(-3, 1, length =
+100)))
+predictionsRidge1 <- predict(ridge,movies_test)
+RMSE(predictionsRidge1, movies_test$box_office)
+R2(predictionsRidge1, movies_test$box_office)
+```
+```{r}
+#Elastic Net
+set.seed(1)
+enet <- train(
+box_office ~., data = movies_train, method = "glmnet",
+trControl = trainControl("cv", number = 10),
+tuneGrid = expand.grid(alpha =seq(0,1, length=10), lambda = 10^seq(-
+3, 1, length = 100)))
+predictionsElasticNet1 <- predict(enet, movies_test)
+RMSE(predictionsElasticNet1, movies_test$box_office)
+R2(predictionsElasticNet1, movies_test$box_office)
+```
+Section 2 - Predicting Movie Box Office Ratio
+```{r}
+#Importing Data
+setwd("D:/02Grad School/R-Dir/Capstone/data")
+oscars = read.csv("the_oscar_award.csv",stringsAsFactors=TRUE)
+movies = read.csv("IMDb movies.csv",stringsAsFactors=TRUE)
+studios = read.csv("D:/02Grad School/R-Dir/Capstone/data/studios.csv",stringsAsFactors=TRUE)
+```
+```{r}
+library(dplyr)
+movies$budget = as.numeric(gsub("\\$", "", movies$budget))
+movies$box_office = as.numeric(gsub("\\$", "", movies$worlwide_gross_income))
+movies$budget = as.numeric(gsub("\\$", "", movies$budget))
+movies$box_office = as.numeric(gsub("\\$", "", movies$worlwide_gross_income))
+movies$usa_box_office = as.numeric(gsub("\\$", "", movies$usa_gross_income))
+movies$year <-substr(as.character(movies$date_published), 1, 4)
+```
+```{r}
+#In this section we filter the data from 1993, this year is the same year IMDB and other sites began aggregating film reviews online
+movies = movies %>%
+arrange(box_office)%>%
+filter(year >= 1993)%>%
+filter(!is.na(box_office))%>%
+filter(!is.na(budget))%>%
+mutate(ratio = box_office/budget)
+```
+```{r}
+library(dplyr)
+large_studios = movies %>%
+inner_join(studios, by = "production_company")
+large_studios %>%
+count(production_company)
+```
+```{r}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+box_office=large_studios$box_office
+budget=large_studios$budget
+ratio = box_office/budget
+#boxoffice over budget
+summary(ratio)
+histogram = ggplot(movies, aes(x=ratio)) + geom_histogram()
+histogram
+categ= large_studios %>% select_if(negate(is.numeric))
+str(categ)
+#Bar plots of Categorical data
+ggplot(large_studios, aes(x=title,y=ratio)) + geom_bar(stat="identity") + theme(axis.text.x =
+element_text(angle = 90, hjust = 1))
+ggplot(large_studios, aes(x=genre,y=ratio)) + geom_bar(stat="identity") + theme(axis.text.x =
+element_text(angle = 90, hjust = 1))
+ggplot(large_studios, aes(x=country,y=ratio)) + geom_bar(stat="identity") + theme(axis.text.x =
+element_text(angle = 90, hjust = 1))
+ggplot(large_studios, aes(x=production_company,y=ratio)) + geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+ratio = movies$ratio
+ratio = log(movies$ratio)
+summary(ratio)
+```
+```{r}
+large_studios %>%
+count(director) %>%
+arrange(-n)
+directorsa = large_studios %>%
+count(director) %>%
+arrange(-n)
+summary(directorsa)
+studios_temp=
+large_studios %>%
+add_count(director, name="directorcount") %>%
+mutate(director = forcats::fct_expand(director, "otherdirectors")) %>%
+mutate(directorsa=case_when(directorcount >= 10~director,
+TRUE ~factor("otherdirectors") ))
+directors_temp= studios_temp %>%
+mutate(value=1L) %>%
+select(imdb_title_id, directorsa, value) %>%
+pivot_wider(names_from = "directorsa", values_from = "value") %>%
+mutate(across(where(is.integer),~ifelse(is.na(.x), 0, .x)))
+```
+```{r}
+library(data.table)
+library(mltools)
+cat = categ[c("genre", "writer")]
+summary(categ$genre)
+cat<-as.data.frame(cat)
+```
+```{r}
+genre1=categ %>%
+mutate(genre=as.character(genre)) %>%
+select(genre) %>%
+tidyr::separate_rows(genre, sep=",") %>%
+count(genre) %>%
+filter(n >=30) %>%
+pull(genre)
+```
+
+```{r}
+writer1=categ %>%
+mutate(writer=as.character(writer)) %>%
+select(writer, imdb_title_id) %>%
+tidyr::separate_rows(writer, sep=",") %>%
+count(writer) %>%
+filter(n > 9) %>%
+pull(writer)
+```
+```{r}
+library(tidyr)
+library(dplyr)
+cat = categ[c("genre")]
+str(cat)
+gen=categ %>%
+mutate(genre=as.character(genre)) %>%
+tidyr::separate_rows(genre, sep=",") %>%
+mutate(value =1) %>%
+pivot_wider(names_from = "genre", values_from= value) %>%
+select(imdb_title_id, all_of(genre1)) %>%
+mutate(across(all_of(genre1), ~ifelse(is.na(.x), 0, .x)))
+summary(gen)
+```
+```{r}
+cat = categ[c("writer")]
+str(cat)
+writ=categ %>%
+select(imdb_title_id, writer) %>%
+mutate(writer=as.character(writer)) %>%
+tidyr::separate_rows(writer, sep=",") %>%
+mutate(value =1) %>%
+pivot_wider(names_from = "writer", values_from= value) %>%
+select(imdb_title_id, all_of(writer1)) %>%
+mutate(across(all_of(writer1), ~ifelse(is.na(.x), 0, .x)))
+summary(writer1)
+```
+```{r}
+library(psych)
+num<-dplyr::select_if(large_studios, is.numeric)
+num
+pairs.panels(num)
+#Scaling, Taking out Categorical variables, Year, and the dependent variables
+movie_temp3<- as.data.frame(scale(num[, -c(4,8,9,10)]))
+ratio = log(large_studios$ratio)#Checking for missing cases
+missing<-sum(!complete.cases(movie_temp3))
+missing
+```
+```{r}
+library(tidyverse)
+movie_temp4= gen %>% inner_join(writ) %>% distinct() %>% inner_join(directors_temp,
+by="imdb_title_id")
+#Binding the variables together
+movie_temp = cbind(movie_temp3, movie_temp4, ratio)
+movie_temp= select(movie_temp,-c(imdb_title_id))
+```
+```{r}
+library(rsample)
+library(caret)
+#Splitting Data
+data_split = initial_split(movie_temp, prop = .8)
+movie_train_data = training(data_split)
+movie_test_data = testing(data_split)
+indexTrainValidation <- createDataPartition(y = movie_train_data$ratio, p = 0.8,list = FALSE)
+movie_val_data <- movie_train_data[-indexTrainValidation,]
+```
+```{r}
+library(tidymodels)
+impute_rec_train = recipe(ratio~., data=movie_train_data) %>%
+step_knnimpute(metascore)%>%
+step_knnimpute(reviews_from_users)%>%
+step_knnimpute(reviews_from_critics)
+impute_rec_test = recipe(ratio~., data=movie_test_data) %>%
+step_knnimpute(metascore)%>%
+step_knnimpute(reviews_from_users)%>%
+step_knnimpute(reviews_from_critics)
+```
+```{r}
+library(tidymodels)
+prep_train=prep(impute_rec_train)
+prep_test = prep(impute_rec_test)
+```
+```{r}
+library(tidymodels)
+movies_train= juice(prep_train)
+movies_test=juice(prep_test)
+#Checking for missing cases
+missing_train<-sum(!complete.cases(movies_train))
+missing_train
+#Checking for missing cases
+missing_test<-sum(!complete.cases(movies_test))
+missing_test
+```
+
+```{r}
+#Linear Regression
+set.seed(1)
+library(caret)
+train.control = trainControl(method = "cv", number = 10)
+linearRegression <- train(ratio ~., data = movies_train, method = "lm", trControl = train.control)
+print(linearRegression)
+summary(linearRegression)
+#Checking the RMSE
+predictionsLR= predict(linearRegression, movies_test)
+RMSE(predictionsLR, movies_test$ratio)
+R2(predictionsLR, movies_test$ratio)
+#Comparing to the Standard Deviation
+sd(movies_train$ratio)
+sd(movies_test$ratio)
+sd(ratio)
+```
+```{r}
+#Lasso
+set.seed(1)
+library(caret)
+library(glmnet)
+lasso <- train(
+ratio ~. , data=movies_train, method = "glmnet",
+trControl = trainControl("cv", number = 10),
+tuneGrid = expand.grid(alpha = 1, lambda = 10^seq(-3, 1, length =
+100)))
+lasso
+coef(lasso$finalModel, lasso$bestTune$lambda)
+predictionsL <- predict(lasso, movies_test)
+RMSE(predictionsL, movies_test$ratio)
+R2(predictionsL, movies_test$ratio)
+```
+```{r}
+#Ridge
+set.seed(1)
+ridge <- train(
+ratio ~., data = movies_train, method = "glmnet",
+trControl = trainControl("cv", number = 10),
+tuneGrid = expand.grid(alpha = 0, lambda = 10^seq(-3, 1, length =
+100)))
+predictionsRidge <- predict(ridge,movies_test)
+RMSE(predictionsRidge, movies_test$ratio)
+R2(predictionsRidge, movies_test$ratio)
+```
+```{r}
+#Elastic Net
+set.seed(1)
+enet <- train(
+ratio ~., data = movies_train, method = "glmnet",
+trControl = trainControl("cv", number = 10),
+tuneGrid = expand.grid(alpha =seq(0,1, length=10), lambda = 10^seq(-
+3, 1, length = 100)))
+predictionsElasticNet <- predict(enet, movies_test)
+RMSE(predictionsElasticNet, movies_test$ratio)
+R2(predictionsElasticNet, movies_test$ratio)
+```
+Section 3 Oscars Classification
+```{r}
+setwd("D:/02Grad School/R-Dir/Capstone/data")
+movies = read.csv("IMDb movies.csv",stringsAsFactors=TRUE)
+oscars = read.csv("the_oscar_award.csv",stringsAsFactors=TRUE)
+studios = read.csv("D:/02Grad School/R-Dir/Capstone/data/studios.csv",stringsAsFactors=TRUE)
+```
+```{r}
+library(dplyr)
+library(tidyverse)
+movies$budget = as.numeric(gsub("\\$", "", movies$budget))
+movies$box_office = as.numeric(gsub("\\$", "", movies$worlwide_gross_income))
+movies$budget = as.numeric(gsub("\\$", "", movies$budget))
+movies$box_office = as.numeric(gsub("\\$", "", movies$worlwide_gross_income))
+movies$usa_box_office = as.numeric(gsub("\\$", "", movies$usa_gross_income))
+movies$year <-substr(as.character(movies$date_published), 1, 4)
+```
+
+
+```{r}
+#We are filtering for 2009 the year that the Oscars expanded the amount of nominations for certain categories, but many films in the 2009 Oscars debuted/made in 2008.
+movies = movies %>%
+arrange(box_office)%>%
+filter(year >= 2008)%>%
+filter(!is.na(box_office))%>%
+filter(!is.na(budget))%>%
+filter(!is.na(writer))%>%
+mutate(ratio = box_office/budget)
+library(dplyr)
+large_studios = movies
+```
+```{r}
+str(oscars$winner)
+library(dplyr)
+oscars=oscars %>%
+mutate(winners=(as.integer(winner=="True")))
+movie_winners=oscars %>%
+filter(year_film >= 2008) %>%
+filter(!is.na(film))%>%
+select(film, winners) %>%
+distinct %>%
+count(winners)
+```
+```{r}
+library(fuzzyjoin)
+library(dplyr)
+oscars_list=oscars %>%
+filter(year_film >= 2008) %>%
+distinct()
+```
+```{r}
+titles_temp=movies %>%
+inner_join(oscars_list, by=c("original_title" = "film"))
+titles_temp2=movies %>%
+inner_join(oscars_list, by=c("title" = "film"))
+oscars_temp = titles_temp %>%
+bind_rows(titles_temp2) %>%
+distinct() %>%
+arrange(imdb_title_id)
+```
+```{r}
+library(dplyr)
+WinnerPred=
+oscars_temp %>%
+select(title) %>%
+inner_join(large_studios, by="title") %>%
+mutate(Winner = 1) %>%
+mutate(Winner = replace_na(Winner, 1)) %>%
+distinct()
+```
+```{r}
+WinnerPred1=
+WinnerPred %>%
+full_join(large_studios) %>%
+mutate(Nom = replace_na(Winner, 0))
+```
+```{r}
+large_studios %>%
+count(director) %>%
+arrange(-n)
+directorsa = large_studios %>%
+count(director) %>%
+arrange(-n)
+summary(directorsa)
+studios_temp=
+large_studios %>%
+add_count(director, name="directorcount") %>%
+mutate(director = forcats::fct_expand(director, "otherdirectors")) %>%
+mutate(directorsa=case_when(directorcount >= 10~director,
+TRUE ~factor("otherdirectors") ))
+directors_temp= studios_temp %>%
+mutate(value=1L) %>%
+select(imdb_title_id, directorsa, value) %>%
+pivot_wider(names_from = "directorsa", values_from = "value") %>%
+mutate(across(where(is.integer),~ifelse(is.na(.x), 0, .x)))
+```
+```{r}
+#Selecting categorical variables
+categ= large_studios %>% select_if(negate(is.numeric))
+str(categ)
+library(data.table)
+library(mltools)
+cat = categ[c("genre", "writer")]
+summary(categ$genre)
+cat<-as.data.frame(cat)
+```
+```{r}
+genre1=categ %>%
+mutate(genre=as.character(genre)) %>%
+select(genre) %>%
+tidyr::separate_rows(genre, sep=",") %>%
+count(genre) %>%
+filter(n >=30) %>%
+pull(genre)
+```
+```{r}
+writer1=categ %>%
+filter(imdb_title_id != "tt2140379") %>%
+mutate(writer=as.character(writer)) %>%
+filter(writer != "") %>%
+select(writer, imdb_title_id) %>%
+tidyr::separate_rows(writer, sep=",") %>%
+count(writer) %>%
+filter(n > 1) %>%
+pull(writer)
+```
+```{r}
+library(tidyr)
+library(dplyr)
+cat = categ[c("genre")]
+str(cat)
+gen=categ %>%
+mutate(genre=as.character(genre)) %>%
+tidyr::separate_rows(genre, sep=",") %>%
+mutate(value =1) %>%
+pivot_wider(names_from = "genre", values_from= value) %>%
+select(imdb_title_id, all_of(genre1)) %>%
+mutate(across(all_of(genre1), ~ifelse(is.na(.x), 0, .x)))
+summary(gen)
+```
+```{r}
+cat = categ[c("writer")]
+str(cat)
+writ=categ %>%
+filter(imdb_title_id != "tt2140379") %>%
+mutate(writer = forcats::fct_drop(writer)) %>%
+select(imdb_title_id, writer) %>%
+mutate(writer=as.character(writer)) %>%tidyr::separate_rows(writer, sep=",") %>%
+mutate(value =1) %>%
+filter(writer != "") %>%
+pivot_wider(names_from = "writer", values_from= value) %>%
+select(imdb_title_id, all_of(writer1)) %>%
+mutate(across(all_of(writer1), ~ifelse(is.na(.x), 0, .x)))
+summary(writer1)
+```
+```{r}
+num<-dplyr::select(WinnerPred1, is.numeric, imdb_title_id)
+num
+#Scaling, Taking out Categorical variables, Year, and the dependent variables
+movie_temp1<- as.data.frame(scale(num[, -c(11,12,13)]))
+Winner=WinnerPred1$Winner
+Oscar = WinnerPred1$Nom
+imdb_title_id = WinnerPred1$imdb_title_id
+movie_temp1$imdb_title_id = num$imdb_title_id
+movie_temp1$Oscar= num$Nom
+#Checking for missing cases
+missing<-sum(!complete.cases(movie_temp1))
+missing
+```
+```{r}
+library(tidyverse)
+movie_temp2= gen %>% inner_join(writ) %>% distinct() %>% inner_join(directors_temp,
+by="imdb_title_id")
+#Binding the variables together
+movie_temp = inner_join(movie_temp1, movie_temp2, by= "imdb_title_id")
+#Dropping all review, vote related columns. Dropping the box-office and budget, but kept ratio.
+movie_temp = select(movie_temp, -imdb_title_id, -reviews_from_critics, -reviews_from_users, -
+metascore,-box_office, -budget, -usa_box_office, -avg_vote, -votes)
+```
+```{r}
+movies = movie_temp
+#Checking for missing cases
+missing<-sum(!complete.cases(movies))
+missing
+```
+```{r}
+movies$Oscar = factor(movies$Oscar)
+set.seed(1)
+test_sample = sample(3300, 733)
+movies_oscars_test = movies[test_sample,]
+movies_oscars_train = movies[-test_sample,]
+```
+```{r}
+#Lasso
+library(e1071)
+library(ROCR)
+library(caret)
+library(glmnet)
+set.seed(1)
+lasso <- train(
+Oscar ~. , data=movies_oscars_train, method = "glmnet", metric="Kappa",
+trControl = trainControl("cv", number = 10),
+tuneGrid = expand.grid(alpha = 1, lambda = 10^seq(-3, 3, length =
+100)))
+table(movies_oscars_test$Oscar)
+predict.lasso = predict(lasso, movies_oscars_test)
+confusionMatrix(predict.lasso, movies_oscars_test$Oscar)
+lasso_predictions_prob=predict(lasso, movies_oscars_test, type="prob")
+head(lasso_predictions_prob)
+pred_lasso = prediction(lasso_predictions_prob$`1`, movies_oscars_test$Oscar)
+performance(pred_lasso, measure = "auc")@y.values
+perf <- performance(pred_lasso, measure = "tpr", x.measure = "fpr")
+#Plotting the ROC Curve
+plot(perf, col = "blue")
+A = coef(lasso$finalModel, lasso$bestTune$lambda)
+A
+rownames(A)[A @ i]
+```
+```{r}
+#Ridgeset.seed(1)
+ridge <- train(
+Oscar ~., data = movies_oscars_train, method = "glmnet", metric="Kappa",
+trControl = trainControl("cv", number = 10),
+tuneGrid = expand.grid(alpha = 0, lambda = 10^seq(-3, 1, length =
+100)))
+table(movies_oscars_test$Oscar)
+predict.ridge = predict(ridge, movies_oscars_test)
+confusionMatrix(predict.ridge, movies_oscars_test$Oscar)
+ridge_predictions_prob=predict(ridge, movies_oscars_test, type="prob")
+pred_ridge = prediction(ridge_predictions_prob$`1`, movies_oscars_test$Oscar)
+performance(pred_ridge, measure = "auc")@y.values
+perfR <- performance(pred_ridge, measure = "tpr", x.measure = "fpr")
+#Plotting the ROC Curve
+plot(perfR, col = "green")
+```
+```{r}
+#Elastic Net
+set.seed(1)
+enet <- train(
+Oscar ~., data = movies_oscars_train, method = "glmnet",
+trControl = trainControl("cv", number = 10),
+tuneGrid = expand.grid(alpha = 0, lambda = 10^seq(-3, 1, length =
+100)))
+table(movies_oscars_test$Oscar)
+predict.enet= predict(enet, movies_oscars_test)
+confusionMatrix(predict.enet, movies_oscars_test$Oscar)
+enet_predictions_prob=predict(enet, movies_oscars_test, type="prob")
+pred_enet = prediction(enet_predictions_prob$`1`, movies_oscars_test$Oscar)
+performance(pred_enet, measure = "auc")@y.values
+perfE <- performance(pred_enet, measure = "tpr", x.measure = "fpr")
+#Plotting the ROC Curve
+plot(perfE, col = "purple")
+```
+```{r}
+#Logisticset.seed(1)
+# str(train_sample)
+model.logistic <- glm(formula=Oscar ~ ., data=movies_oscars_train, family="binomial", maxit = 5)
+summary(model.logistic)
+```
+```{r}
+table(movies_oscars_test$Oscar)
+predict.logistic <- predict(model.logistic, movies_oscars_test, type="response")
+predict.logistic.label = factor(ifelse(predict.logistic > .5, "Yes", "No"))
+actual.label = movies_oscars_test$Oscar
+table(actual.label, predict.logistic.label)
+```
+```{r}
+library(pROC)
+ROC <- roc(movies_oscars_test$Oscar, predict.logistic)
+#Plotting the ROC Curve
+ROCplot = plot(ROC, col = "red")
+#AUC= The area under the curve
+auc(ROC)
+```
