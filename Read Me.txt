@@ -1,4 +1,4 @@
-Box-Office Budget Prediction, Oscars Classification with Machine Learning in R, R studio.
+Box-Office Budget Prediction, Oscars Classification with Machine Learning in R, Posit.
 
 This project aims to predict the box-office performance of the mainstream movies from large production studios. This project uses several regression models and calculates the error of each one. 
 
